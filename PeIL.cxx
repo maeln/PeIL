@@ -21,15 +21,31 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <snappy.h>
+
 #include <SOIL/SOIL.h>
 
 // USE : PeIL <img file> <output C file>
+// PeIL -c <img> <.pak file to append> <index file>
 
-// TO DO : Zlib that shit.
+bool shouldCompress(const char *arg)
+{
+	if(arg = "-c")
+		return true;
+	else
+		return false;
+}
 
 int main(int argc, char **argv)
 {
-	std::string name(argv[1]);
+	bool comp = shouldCompress(argv[1]);
+	
+	std::string name;
+	if(comp)
+		name = argv[2];
+	else
+		name = argv[1];
+		
 	std::string trueName;
 	for(unsigned int i=0; i < name.size(); i++)
 	{
@@ -39,29 +55,59 @@ int main(int argc, char **argv)
 			trueName.push_back(name[i]);
 	}
 	// Juste pour récupérer le nom sans l'extension de fichier ( tout ce qui est après un point n'est pas conservé ).
-	std::cout << trueName << std::endl;
+	
 		
 	int width, height, channels;
 	// On charge l'image.
-	unsigned char* image = SOIL_load_image(argv[1], &width, &height, &channels, SOIL_LOAD_AUTO);
+	std::ofstream output;
+	unsigned char* image;
 	
-	std::ofstream output(argv[2], std::ios::out | std::ios::ate);
+	if(comp)
+	{
+		image = SOIL_load_image(name.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
+		std::ofstream output(argv[3], std::ios::out | std::ios::ate | std::ios::binary);
+	}
+	else
+	{
+		image = SOIL_load_image(name.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
+		std::ofstream output(argv[2], std::ios::out | std::ios::ate);
+	}
+	
+	
 	if(output)
 	{
-		output << "// Image : " << name << ", wdith : " << width << ", height : " << height << ", depth : " << channels << std::endl;
-		output << "// Name : " << trueName << std::endl;
-		output << "unsigned char " << trueName << "[] = {" << std::endl;
-		
-		for(unsigned int i=0; i < width*height*channels; i++)
+		if(comp)
 		{
-			output << (int)image[i] << ","; // On écrit peu à peu chaque composante de chaque pixel.
-			if(((i+1) % channels) == 0) // Si on à écrit tout les données d'un pixel, on reviens à la ligne.
-				output << std::endl;
+			std::string cdata;
+			int* towrite = (int*)image;
+			
+			// snappy::Compress(image, sizeof(image), &cdata);
+			// towrite = cdata.c_str();
+			
+			for(unsigned int i=0; i < width*height*channels; i++)
+			{
+				output.write((char*)&towrite[i], sizeof(towrite[i]));
+			}
+			
+			output.close();
 		}
-		
-		output << "};" << std::endl; // C'est un fichier C, il faut donc ne pas oublier de rajouter le retour à la ligne en fin de fichier.
-		
-		output.close();
+		else
+		{
+			output << "// Image : " << name << ", wdith : " << width << ", height : " << height << ", depth : " << channels << std::endl;
+			output << "// Name : " << trueName << std::endl;
+			output << "unsigned char " << trueName << "[] = {" << std::endl;
+			
+			for(unsigned int i=0; i < width*height*channels; i++)
+			{
+				output << (int)image[i] << ","; // On écrit peu à peu chaque composante de chaque pixel.
+				if(((i+1) % channels) == 0) // Si on à écrit tout les données d'un pixel, on reviens à la ligne.
+					output << std::endl;
+			}
+			
+			output << "};" << std::endl; // C'est un fichier C, il faut donc ne pas oublier de rajouter le retour à la ligne en fin de fichier.
+			
+			output.close();
+		}
 	}
 	else
 		std::cerr << "Unable to create file " << argv[2] << std::endl;
